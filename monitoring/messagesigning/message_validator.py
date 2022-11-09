@@ -2,12 +2,12 @@ from monitoring.mock_uss.scdsc import report_settings
 from loguru import logger
 import json
 import base64
-import hashlib
 import requests
 from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
 import flask
+from monitoring.messagesigning.hasher import get_content_digest
 
 class MessageValidatorService:
     def __init__(self):
@@ -58,13 +58,10 @@ class MessageValidatorService:
             self.check_content_digests(interaction_id, signature_info, validation_type)
             self.check_message_signing_headers(interaction_id, signature_info, validation_type)
 
-    def get_content_digest(self, payload):
-        return base64.b64encode(hashlib.sha512(payload.encode('utf-8')).digest()).decode('utf-8')
-
     def check_content_digests(self, interaction_id, signature_info, validation_type):
         payload = signature_info['body']
         content_digest_from_header = self.headers['content-digest']
-        generated_content_digest = "sha-512=:{}:".format(self.get_content_digest(payload))
+        generated_content_digest = "sha-512=:{}:".format(get_content_digest(payload))
         if content_digest_from_header != generated_content_digest:
             error_message = "Content Digest in the {} header was not valid.".format(
                 validation_type
@@ -177,14 +174,14 @@ class MessageValidatorService:
                     "@query": "?" if not flask.request.query_string else flask.request.query_string,
                     "authorization": self.headers.get('authorization', ''),
                     "content-type": content_type,
-                    "content-digest": "sha-512=:{}:".format(self.get_content_digest(signature_info['body'])),
+                    "content-digest": "sha-512=:{}:".format(get_content_digest(signature_info['body'])),
                     "x-utm-jws-header": self.headers['x-utm-jws-header']
                 }
             else:
                 base_value_map = {
                     "@status": signature_info['status'],
                     "content-type": content_type,
-                    "content-digest": "sha-512=:{}:".format(self.get_content_digest(signature_info['body'])),
+                    "content-digest": "sha-512=:{}:".format(get_content_digest(signature_info['body'])),
                     "x-utm-jws-header": self.headers['x-utm-jws-header']
                 }
             sig_base = ""

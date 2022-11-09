@@ -1,14 +1,12 @@
 import base64
-import hashlib
 import time
 from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
-import os
-import json
 from loguru import logger
 import urllib.parse
 from monitoring.messagesigning.config import Config
+from monitoring.messagesigning.hasher import get_content_digest
 
 def get_x_utm_jws_header():
       return '\"alg\"=\"{}\", \"typ\"=\"{}\", \"kid\"=\"{}\", \"x5u\"=\"{}\"'.format(
@@ -18,7 +16,7 @@ def get_x_utm_jws_header():
 def get_signed_headers(object_to_sign):
     signed_type = str(type(object_to_sign))
     sig, sig_input = get_signature(object_to_sign, signed_type)
-    content_digest = get_content_digest(convert_request_dot_body(object_to_sign.body)) if 'PreparedRequest' in signed_type else get_content_digest('' if not object_to_sign.json else json.dumps(object_to_sign.json))
+    content_digest = get_content_digest(object_to_sign.body) if 'PreparedRequest' in signed_type else get_content_digest(object_to_sign.get_data())
     signed_headers = {
       'x-utm-message-signature-input': 'utm-message-signature={}'.format(sig_input),
       'x-utm-message-signature': 'utm-message-signature=:{}:'.format(sig),
@@ -26,10 +24,6 @@ def get_signed_headers(object_to_sign):
       'content-digest': 'sha-512=:{}:'.format(content_digest)
     }
     return signed_headers
-
-def get_content_digest(payload):
-  payload = json.dumps(payload) if payload else ''
-  return base64.b64encode(hashlib.sha512(payload.encode('utf-8')).digest()).decode('utf-8')
 
 def get_signature_input(sig_base):
   sig_base_comps = sig_base.split('\n')
@@ -47,22 +41,13 @@ def get_signature(object_to_sign, signed_type):
     private_key = RSA.import_key(priv_key_file.read())
   return base64.b64encode(pkcs1_15.new(private_key).sign(hash)).decode("utf-8"), sig_input
 
-def convert_request_dot_body(request_body):
-  payload = '' if not request_body else request_body.decode('utf-8')
-  try:
-    payload = json.loads(payload)
-  except Exception:
-    if payload:
-      logger.error("{} was not a valid json string....".format(payload))
-  return payload
-
 def get_key_id():
   return 'mock_uss_priv_key'
 
 def get_signature_base(object_to_sign, signed_type):
   covered_components = ["@method", "@path", "@query", "authorization", "content-type", "content-digest", "x-utm-jws-header"] if 'Request' in signed_type else ["@status", "content-type", "content-digest", "x-utm-jws-header"]
   headers = {key.lower(): value for key,value in object_to_sign.headers.items()}
-  content_digest = get_content_digest(convert_request_dot_body(object_to_sign.body)) if 'Request' in signed_type else get_content_digest('' if not object_to_sign.json else json.dumps(object_to_sign.json))
+  content_digest = get_content_digest(object_to_sign.body) if 'Request' in signed_type else get_content_digest(object_to_sign.get_data())
   if 'Request' in signed_type:
     parsed_url = urllib.parse.urlparse(object_to_sign.url)
     base_value_map = {

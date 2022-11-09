@@ -9,9 +9,7 @@ message_validator = MessageValidatorService()
 def validate_response(response):
     if os.environ.get("MESSAGE_SIGNING", None) == "true":
         try:
-            logger.info("Validating response...")
             associated_request = response.request
-            response_body = get_response_body(response)
             signature_info = {
                 'method': associated_request.method,
                 'url': associated_request.url,
@@ -19,7 +17,7 @@ def validate_response(response):
                 'headers': json.dumps({k: v for k, v in response.headers.items()}),
                 "status": response.status_code
             }
-            signature_info['body'] = json.dumps(response_body) if response_body else ''
+            signature_info['body'] = response.content
             query = {
             'request': {
                 'method': associated_request.method,
@@ -30,7 +28,7 @@ def validate_response(response):
             'response':  {
                 'code': response.status_code,
                 'headers': response.headers,
-                'json': None if not response_body else response_body
+                'json': None if not response.json else response.json
             } 
             }
             test_description = 'Message signing headers in the response from the outgoing {} request to {} should be valid.'.format(
@@ -45,11 +43,5 @@ def validate_response(response):
             message_validator.analyze_headers(interaction_id, signature_info, 'response')
 
         except Exception as e:
+            logger.info(str(type(response)))
             logger.error("Error validating response: " + str(e))
-
-def get_response_body(response):
-    try:
-        data = response.json()
-        return data
-    except Exception:
-        return ''

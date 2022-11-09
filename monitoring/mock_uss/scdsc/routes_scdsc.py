@@ -93,6 +93,7 @@ def notify_operational_intent_details_changed():
     """Implements notifyOperationalIntentDetailsChanged in ASTM SCD API."""
     # Check message signing headers only if the message signing feature is on.
     response = flask.jsonify('')
+    status_code = 204
     if os.environ.get('MESSAGE_SIGNING', None) == "true":
         try:
             analysis_result = request_validator.validate_message_signing_headers()
