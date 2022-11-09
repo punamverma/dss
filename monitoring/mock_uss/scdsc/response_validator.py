@@ -10,6 +10,7 @@ def validate_response(response):
     if os.environ.get("MESSAGE_SIGNING", None) == "true":
         try:
             associated_request = response.request
+            response_body = get_response_body(response)
             signature_info = {
                 'method': associated_request.method,
                 'url': associated_request.url,
@@ -28,7 +29,7 @@ def validate_response(response):
             'response':  {
                 'code': response.status_code,
                 'headers': response.headers,
-                'json': None if not response.json else response.json
+                'json': None if not response_body else response_body
             } 
             }
             test_description = 'Message signing headers in the response from the outgoing {} request to {} should be valid.'.format(
@@ -45,3 +46,9 @@ def validate_response(response):
         except Exception as e:
             logger.info(str(type(response)))
             logger.error("Error validating response: " + str(e))
+
+def get_response_body(response):
+    try:
+        return response.json()
+    except Exception as e:
+        return ''
