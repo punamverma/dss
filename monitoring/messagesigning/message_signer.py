@@ -15,8 +15,9 @@ def get_x_utm_jws_header():
 
 def get_signed_headers(object_to_sign):
     signed_type = str(type(object_to_sign))
+    is_signing_request = 'PreparedRequest' in signed_type
     sig, sig_input = get_signature(object_to_sign, signed_type)
-    content_digest = get_content_digest(object_to_sign.body) if 'PreparedRequest' in signed_type else get_content_digest(object_to_sign.get_data())
+    content_digest = get_content_digest(object_to_sign.body) if is_signing_request else get_content_digest(object_to_sign.get_data())
     signed_headers = {
       'x-utm-message-signature-input': 'utm-message-signature={}'.format(sig_input),
       'x-utm-message-signature': 'utm-message-signature=:{}:'.format(sig),
@@ -45,10 +46,12 @@ def get_key_id():
   return 'mock_uss_priv_key'
 
 def get_signature_base(object_to_sign, signed_type):
-  covered_components = ["@method", "@path", "@query", "authorization", "content-type", "content-digest", "x-utm-jws-header"] if 'Request' in signed_type else ["@status", "content-type", "content-digest", "x-utm-jws-header"]
+  is_signing_requests = 'PreparedRequest' in signed_type
+  covered_components = ["@method", "@path", "@query", "authorization", "content-type", "content-digest", "x-utm-jws-header"] if is_signing_requests else ["@status", "content-type", "content-digest", "x-utm-jws-header"]
   headers = {key.lower(): value for key,value in object_to_sign.headers.items()}
-  content_digest = get_content_digest(object_to_sign.body) if 'Request' in signed_type else get_content_digest(object_to_sign.get_data())
-  if 'Request' in signed_type:
+  is_signing_requests = 'PreparedRequest' in signed_type
+  content_digest = get_content_digest(object_to_sign.body) if is_signing_requests else get_content_digest(object_to_sign.get_data())
+  if is_signing_requests:
     parsed_url = urllib.parse.urlparse(object_to_sign.url)
     base_value_map = {
       "@method": object_to_sign.method,
