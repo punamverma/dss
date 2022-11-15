@@ -99,10 +99,10 @@ def scdsc_injection_end_reporter() -> Tuple[str, int]:
 @requires_scope([SCOPE_SCD_QUALIFIER_INJECT])
 def scd_capabilities() -> Tuple[str, int]:
     """Implements USS capabilities in SCD automated testing injection API."""
-    # try:
-        # scd_client.create_subscription(resources.utm_client, str(uuid.uuid4()))
-    # except Exception as e:
-    #     logger.error("Could not create subscription: {}".format(str(e)))
+    try:
+        scd_client.create_subscription(resources.utm_client, str(uuid.uuid4()))
+    except Exception as e:
+        logger.error("Could not create subscription: {}".format(str(e)))
     return flask.jsonify(
         CapabilitiesResponse(
             capabilities=[
