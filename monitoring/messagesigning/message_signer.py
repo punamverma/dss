@@ -49,7 +49,6 @@ def get_signature_base(object_to_sign, signed_type):
   is_signing_requests = 'PreparedRequest' in signed_type
   covered_components = ["@method", "@path", "@query", "authorization", "content-type", "content-digest", "x-utm-jws-header"] if is_signing_requests else ["@status", "content-type", "content-digest", "x-utm-jws-header"]
   headers = {key.lower(): value for key,value in object_to_sign.headers.items()}
-  is_signing_requests = 'PreparedRequest' in signed_type
   content_digest = get_content_digest(object_to_sign.body) if is_signing_requests else get_content_digest(object_to_sign.get_data())
   if is_signing_requests:
     parsed_url = urllib.parse.urlparse(object_to_sign.url)

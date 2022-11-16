@@ -125,7 +125,9 @@ class MessageValidatorService:
                 }
             return
         try:
+            status_code = -1
             pub_key_response = requests.get(endpoint_for_public_key)
+            status_code = pub_key_response.status_code
             pub_key_response.raise_for_status()
             self.public_key = RSA.import_key(pub_key_response.content)
         except Exception as e:
@@ -137,7 +139,7 @@ class MessageValidatorService:
                 'context': test_context,
                 'summary': error_message,
                 'details': "Error getting the public key from {}. Status code was: {}".format(
-                    endpoint_for_public_key, str(pub_key_response.status_code)
+                    endpoint_for_public_key, str(status_code)
                 ),
                 'interactions': [interaction_id]
             }
