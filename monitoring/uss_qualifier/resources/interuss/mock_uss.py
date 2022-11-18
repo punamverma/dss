@@ -31,13 +31,18 @@ class MockUSSClient(object):
     # TODO: Add other methods to interact with the mock USS in other ways (like starting/stopping message signing data collection)
     def start_msg_sign_recording(self) -> fetch.Query:
         initiated_at = arrow.utcnow().datetime
-        resp = self.session.post("/scdsc/v1/startreport", scope=SCOPE_SCD_QUALIFIER_INJECT)
+        resp = self.session.post(
+            "/scdsc/v1/startreport", scope=SCOPE_SCD_QUALIFIER_INJECT
+        )
         return fetch.describe_query(resp, initiated_at)
 
     def stop_msg_sign_recording(self) -> fetch.Query:
         initiated_at = arrow.utcnow().datetime
-        resp = self.session.post("/scdsc/v1/endreport", scope=SCOPE_SCD_QUALIFIER_INJECT)
+        resp = self.session.post(
+            "/scdsc/v1/endreport", scope=SCOPE_SCD_QUALIFIER_INJECT
+        )
         return fetch.describe_query(resp, initiated_at)
+
 
 class MockUSSSpecification(ImplicitDict):
     mock_uss_base_url: str
