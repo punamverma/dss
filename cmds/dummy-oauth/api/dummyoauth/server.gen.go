@@ -3,6 +3,7 @@ package dummyoauth
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -83,38 +84,57 @@ func (s *APIRouter) GetToken(exp *regexp.Regexp, w http.ResponseWriter, r *http.
 func (s *APIRouter) PostToken(exp *regexp.Regexp, w http.ResponseWriter, r *http.Request) {
 	var req PostTokenRequest = *new(PostTokenRequest)
 
-    // Authorize request
-    req.Auth = s.Authorizer.Authorize(w, r, &PostTokenSecurity)
+	// Authorize request
+	req.Auth = s.Authorizer.Authorize(w, r, &PostTokenSecurity)
+
+	msig := r.Header.Get("x-utm-message-signature")
+	req.XUtmMessageSignature = &msig
+
+	msigip := r.Header.Get("x-utm-message-signature-input")
+	if msigip != "" {
+		req.XUtmMessageSignatureInput = &msigip
+	}
+
+	var jwsh xUtmMessageSignatureJoseHeader
+	json.Unmarshal([]byte(r.Header.Get("x-utm-jws-header")), &jwsh)
+
+	req.XUtmJwsHeader = &jwsh
 
 	// Parse request body
 	var body TokenRequestForm
+	// defer r.Body.Close()
+	// req.BodyParseError = json.NewDecoder(r.Body).Decode(&body)
+
+	cd := r.Header.Get("content_digest")
+	if cd != "" {
+		req.ContentDigest = &cd
+	}
 
 	r.ParseForm()
+	body.GrantType = r.FormValue("grant_type")
 	body.ClientId = r.FormValue("client_id")
 	body.Audience = r.FormValue("audience")
 	body.Scope = r.FormValue("scope")
 	req.Body = &body
+	// Call implementation
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	response := s.Implementation.PostToken(ctx, &req)
 
-    // Call implementation
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    response := s.Implementation.PostToken(ctx, &req)
-
-    // Write response to client
-    if response.Response200 != nil {
-      api.WriteJSON(w, 200, response.Response200)
-      return
-    }
-    if response.Response400 != nil {
-      api.WriteJSON(w, 400, response.Response400)
-      return
-    }
-    if response.Response500 != nil {
-      api.WriteJSON(w, 500, response.Response500)
-      return
-    }
-    api.WriteJSON(w, 500, api.InternalServerErrorBody{ErrorMessage: "Handler implementation did not set a response"})
-
+	// Write response to client
+	if response.Response200 != nil {
+		api.WriteJSON(w, 200, response.Response200)
+		return
+	}
+	if response.Response400 != nil {
+		api.WriteJSON(w, 400, response.Response400)
+		return
+	}
+	if response.Response500 != nil {
+		api.WriteJSON(w, 500, response.Response500)
+		return
+	}
+	api.WriteJSON(w, 500, api.InternalServerErrorBody{ErrorMessage: "Handler implementation did not set a response"})
 }
 
 func (s *APIRouter) GetWellKnownOauthAuthorizationServer(exp *regexp.Regexp, w http.ResponseWriter, r *http.Request) {
