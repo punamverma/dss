@@ -5,6 +5,10 @@ import uuid
 import flask
 import requests.exceptions
 import yaml
+import json
+from datetime import datetime
+
+from loguru import logger
 
 from monitoring.monitorlib import scd, versioning
 from monitoring.monitorlib.clients import scd as scd_client
@@ -27,6 +31,11 @@ from monitoring.mock_uss.auth import requires_scope
 from monitoring.mock_uss.scdsc import database
 from monitoring.mock_uss.scdsc.database import db
 from monitoring.monitorlib.uspace import problems_with_flight_authorisation
+from monitoring.monitorlib.clients.scd import OperationError
+from monitoring.mock_uss.scdsc import report_settings
+import monitoring.mock_uss.scdsc.response_validator as response_validator
+from loguru import logger
+import flask
 
 
 def query_operational_intents(
@@ -52,11 +61,11 @@ def query_operational_intents(
 
     updated_op_intents = []
     for op_intent_ref in get_details_for:
-        updated_op_intents.append(
-            scd_client.get_operational_intent_details(
-                resources.utm_client, op_intent_ref.uss_base_url, op_intent_ref.id
-            )
+        op_int, resp = scd_client.get_operational_intent_details(
+            resources.utm_client, op_intent_ref.uss_base_url, op_intent_ref.id
         )
+        response_validator.validate_response(resp)
+        updated_op_intents.append(op_int)
 
     with db as tx:
         for op_intent in updated_op_intents:
@@ -73,10 +82,30 @@ def scdsc_injection_status() -> Tuple[str, int]:
     return flask.jsonify({"status": "Ready", "version": versioning.get_code_version()})
 
 
+@webapp.route("/scdsc/v1/startreport", methods=["POST"])
+@requires_scope([SCOPE_SCD_QUALIFIER_INJECT])
+def scdsc_injection_start_reporter() -> Tuple[str, int]:
+    """Implements USS status in SCD automated testing injection API."""
+    report_settings.reset()
+    return flask.jsonify({"report": "started"})
+
+
+@webapp.route("/scdsc/v1/endreport", methods=["POST"])
+def scdsc_injection_end_reporter() -> Tuple[str, int]:
+    """Implements USS status in SCD automated testing injection API."""
+    report_settings.reprt.save()
+    report_settings.reset()
+    return flask.jsonify({"report": "ended"})
+
+
 @webapp.route("/scdsc/v1/capabilities", methods=["GET"])
 @requires_scope([SCOPE_SCD_QUALIFIER_INJECT])
 def scd_capabilities() -> Tuple[str, int]:
     """Implements USS capabilities in SCD automated testing injection API."""
+    try:
+        scd_client.create_subscription(resources.utm_client, str(uuid.uuid4()))
+    except Exception as e:
+        logger.error("Could not create subscription: {}".format(str(e)))
     return flask.jsonify(
         CapabilitiesResponse(
             capabilities=[
@@ -93,10 +122,12 @@ def scd_capabilities() -> Tuple[str, int]:
 def inject_flight(flight_id: str) -> Tuple[str, int]:
     """Implements flight injection in SCD automated testing injection API."""
     try:
-        json = flask.request.json
-        if json is None:
+        req_json = flask.request.json
+        if req_json is None:
             raise ValueError("Request did not contain a JSON payload")
-        req_body: InjectFlightRequest = ImplicitDict.parse(json, InjectFlightRequest)
+        req_body: InjectFlightRequest = ImplicitDict.parse(
+            req_json, InjectFlightRequest
+        )
     except ValueError as e:
         msg = "Create flight {} unable to parse JSON: {}".format(flight_id, e)
         return msg, 400
@@ -186,7 +217,13 @@ def inject_flight(flight_id: str) -> Tuple[str, int]:
             ),
             200,
         )
-    scd_client.notify_subscribers(
+
+    # remove self as a notification subscriber for mock uss POST operation
+    for subscriber in result.subscribers.copy():
+        if subscriber.uss_base_url == "http://host.docker.internal:8074/mock/scd":
+            result.subscribers.remove(subscriber)
+
+    notify_responses = scd_client.notify_subscribers(
         resources.utm_client,
         result.operational_intent_reference.id,
         scd.OperationalIntent(
@@ -195,6 +232,9 @@ def inject_flight(flight_id: str) -> Tuple[str, int]:
         ),
         result.subscribers,
     )
+
+    for notify_response in notify_responses:
+        response_validator.validate_response(notify_response)
 
     # Store flight in database
     record = database.FlightRecord(
@@ -251,13 +291,18 @@ def delete_flight(flight_id: str) -> Tuple[str, int]:
             ),
             200,
         )
-    scd_client.notify_subscribers(
-        resources.utm_client,
-        result.operational_intent_reference.id,
-        None,
-        result.subscribers,
-    )
-
+    for subscriber in result.subscribers.copy():
+        if subscriber.uss_base_url == "http://host.docker.internal:8074/mock/scd":
+            result.subscribers.remove(subscriber)
+    try:
+        scd_client.notify_subscribers(
+            resources.utm_client,
+            result.operational_intent_reference.id,
+            None,
+            result.subscribers,
+        )
+    except (OperationError) as e:
+        print("Error notifying a subscriber about delete operation %s", e)
     return flask.jsonify(DeleteFlightResponse(result=DeleteFlightResult.Closed))
 
 
@@ -265,10 +310,10 @@ def delete_flight(flight_id: str) -> Tuple[str, int]:
 @requires_scope([SCOPE_SCD_QUALIFIER_INJECT])
 def clear_area() -> Tuple[str, int]:
     try:
-        json = flask.request.json
-        if json is None:
+        req_json = flask.request.json
+        if req_json is None:
             raise ValueError("Request did not contain a JSON payload")
-        req = ImplicitDict.parse(json, ClearAreaRequest)
+        req = ImplicitDict.parse(req_json, ClearAreaRequest)
     except ValueError as e:
         msg = "Unable to parse ClearAreaRequest JSON request: {}".format(e)
         return msg, 400
