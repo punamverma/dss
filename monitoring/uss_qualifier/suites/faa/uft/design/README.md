@@ -40,11 +40,11 @@ The property to set is `resources.resource_declarations.flight_planners.specific
     ```bash
    ./run_well_known.sh
    ```
-5. Prepare your USS to run with
+5. Prepare your USS to run with -
    1. dummy-oauth for getting tokens. Depending on your setup - localhost(http://localhost:8085/token) or dockerized (http://host.docker.internal:8085/token). The server has a GET and POST endpoint for getting tokens.
    2. DSS - Depending on your setup - localhost(http://localhost:8082/dss) or dockerized (http://host.docker.internal:8082/dss)
 6. Run Uss Qualifier Interface for your USS.
-7. Run USS Qualifier tests using script [run_locally.sh](../../../../../uss_qualifier/run_locally.sh) with config
+7. Run uss_qualifier tests using script [run_locally.sh](../../../../../uss_qualifier/run_locally.sh) with a config.
     ```bash
    ./run_locally.sh configurations.dev.faa.uft.local_message_signing
    ```
@@ -60,8 +60,10 @@ The report file name is - report_mock_uss_scdsc_messagesigning.json.
 There will be 3 runs of tests, with the above two reports for each run.
 
 ### Positive tests -
-A valid set of private/public keys will be provided under [keys folder](../../../../../messagesigning/keys)
-A USS should pass all the uss_qualifier tests in this suite.
+Two valid key pairs are provided under [keys folder](../../../../../messagesigning/keys).
+The key pair in use is set in [config file](../../../../../messagesigning/config.py)
+(The key pair mock_faa_priv.pem and mock_faa_pub.der has been used, as it also passes SCVP validation by the USS-under-test).
+A USS must pass all the uss_qualifier tests in this suite (SCD flow tests) to be able to generate the complete reports.
 As well as the message_signing report should have no issues reported. A USS will provide both of these reports.
 The message_signing report includes interactions and issues between the mock_uss and the USS-under-test.
 No issues indicate the USS-under-test message-signed all its requests and responses.
@@ -70,10 +72,12 @@ For analysis of the message signing reports, please refer to [Analyzing the mess
 
 ### Negative tests -
 Replace the private/public keys with invalid key pair, the message signing by mock_uss will be invalid.
-The USS-under-test will respond with 403 to all requests from mock_uss. The Uss Qualifier tests will not pass.
+In this run, the uss_qualifier tests will not pass.
+The USS-under-test will respond with 403 to all requests from mock_uss.
 The USS can provide the two reports, the message signing report would show 403 in interactions with mock_uss.
 
 ### No message signing -
-You can set the MESSAGE_SIGNING env variable to false to switch off message-signing in mock_uss.
-The USSes are expected to let the requests with no message signing pass with 200. All the UssQualifier tests will pass.
-You can provide both the reports. The message_signing reports will show 200 response from the USS-under-test.
+You can set the MESSAGE_SIGNING env variable to false in run_locally_scdsc.sh script, to switch off message-signing in mock_uss.
+The USSes are expected to let the requests with no message signing pass with 200. In this run, all the uss_qualifier tests must pass.
+You can provide both the reports. The message_signing reports will show 200 response from the USS-under-test,
+despite no message -signed requests from mock_uss.
